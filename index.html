@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>설문조사</title>
+    <meta name="naver-site-verification" content="0f1e69a40cdac5ee9b28ab4a1c556ec1afad810e" />
+    <style>
+        /* CSS는 이전과 동일하게 유지됩니다 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 700px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            padding: 40px;
+        }
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        p {
+            font-size: 18px;
+            color: #555;
+            line-height: 1.6;
+        }
+        .question-block {
+            margin-bottom: 30px;
+        }
+        .question-block label {
+            display: block;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        input[type="text"], input[type="tel"], select { 
+            width: 95%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        .personal-info {
+            background: #f9f9f9;
+            border: 1px solid #eee;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .personal-info label {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .choice-option {
+            margin-bottom: 10px;
+            font-size: 17px;
+        }
+        .choice-option input[type="radio"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 14px 25px;
+            border: none;
+            border-radius: 6px;
+            font-size: 18px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        .message {
+            padding: 20px;
+            border-radius: 6px;
+            font-size: 18px;
+            text-align: center;
+        }
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="survey-container">
+        <h1 id="survey-title">설문지 로딩 중...</h1>
+        <p id="survey-desc"></p>
+        
+        <form id="survey-form">
+            <div class="personal-info">
+                <h2>응답자 정보</h2>
+                <div class="question-block">
+                    <label for="user-name">이름</label>
+                    <input type="text" id="user-name" name="user_name" placeholder="이름을 입력하세요" required>
+                </div>
+                <div class="question-block">
+                    <label for="user-phone">전화번호</label>
+                    <input type="tel" id="user-phone" name="user_phone" placeholder="010-1234-5678" required>
+                </div>
+            </div>
+
+            <h2>설문 문항</h2>
+            <div id="questions-wrapper">
+                </div>
+            <button type="submit">설문지 제출하기</button>
+        </form>
+    </div>
+
+    <div class="container" id="message-container" style="display: none;">
+        </div>
+
+    <script>
+        // 🚨 API 주소 확인: Render 서버 주소로 정확히 지정해주세요.
+        const API_URL = 'https://survay.onrender.com/api'; 
+        const surveyForm = document.getElementById('survey-form');
+        const surveyContainer = document.getElementById('survey-container');
+        const questionsWrapper = document.getElementById('questions-wrapper');
+        const surveyTitle = document.getElementById('survey-title');
+        const surveyDesc = document.getElementById('survey-desc');
+        const messageContainer = document.getElementById('message-container');
+
+        let surveyId = null; 
+        let originalQuestions = []; 
+
+        window.addEventListener('load', async () => {
+            
+            // 🚨 최종 수정된 ID 추출 로직: /ID 주소 또는 최신 설문지 ID를 가져옵니다.
+            const pathParts = window.location.pathname.split('/').filter(p => p.length > 0);
+            const params = new URLSearchParams(window.location.search);
+            
+            // 1. /index.html?id=... 형태 (Netlify 리다이렉트가 보내는 경우)
+            if (params.has('id')) {
+                 surveyId = params.get('id');
+            } 
+            // 2. /설문지ID 형태 (유저가 직접 /ID로 접근했거나, 최신 설문 로드 후 주소 변경된 경우)
+            else if (pathParts.length > 0) {
+                 const lastPart = pathParts[pathParts.length - 1];
+                 // ID 형태 검증 (24자리 16진수)
+                 if (lastPart.length === 24 && /^[0-9a-fA-F]+$/.test(lastPart)) {
+                    surveyId = lastPart;
+                 }
+            }
+            
+            // 3. ID가 여전히 없고, 최상위 주소(/)로 접속한 경우 (최신 설문 ID를 API에서 가져옴)
+            if (!surveyId && (window.location.pathname === '/' || window.location.pathname === '/index.html')) {
+                 try {
+                     const latestResponse = await fetch(`${API_URL}/latest-survey`); 
+                     if (!latestResponse.ok) { throw new Error('생성된 설문지가 없습니다.'); }
+                     
+                     const latestResult = await latestResponse.json();
+                     
+                     if (latestResult.surveyId) {
+                         surveyId = latestResult.surveyId; 
+                         // 주소창을 /ID 형태로 변경 (깔끔한 주소 유지)
+                         history.replaceState(null, '', `/${surveyId}`); 
+                     } else {
+                          showError('현재 생성된 설문지가 없습니다.');
+                          return;
+                     }
+                 } catch (error) {
+                     showError(`최신 설문지 로딩 오류: ${error.message}`);
+                     return;
+                 }
+            }
+            
+            if (!surveyId) {
+                showError('잘못된 접근입니다. 유효한 설문지 주소가 필요합니다.');
+                return;
+            }
+
+            // --- 설문지 로드 시작 ---
+            try {
+                const response = await fetch(`${API_URL}/surveys/${surveyId}`);
+                if (!response.ok) {
+                    throw new Error('설문지를 불러올 수 없습니다.');
+                }
+                const survey = await response.json();
+
+                surveyTitle.textContent = survey.title;
+                surveyDesc.textContent = survey.description;
+                originalQuestions = survey.questions; 
+
+                renderQuestions(survey.questions);
+
+            } catch (error) {
+                showError(`설문지 로딩 오류: ${error.message}`);
+            }
+        });
+
+        // --- 2. 불러온 질문들로 HTML 그리기 (드롭다운/평점 포함) ---
+        function renderQuestions(questions) {
+            questionsWrapper.innerHTML = ''; 
+            
+            questions.forEach((q, index) => {
+                const questionBlock = document.createElement('div');
+                questionBlock.className = 'question-block';
+                const questionName = `q_${index}`;
+
+                let content = `<label for="${questionName}">${index + 1}. ${q.text}</label>`;
+
+                switch (q.type) {
+                    case 'text':
+                        content += `<input type="text" id="${questionName}" name="${questionName}" class="question-input" required>`;
+                        break;
+                    
+                    case 'choice':
+                        content += q.options.map(opt => `
+                            <div class="choice-option">
+                                <input type="radio" id="${questionName}_${opt}" name="${questionName}" value="${opt}" class="question-input" required>
+                                <label for="${questionName}_${opt}">${opt}</label>
+                            </div>
+                        `).join('');
+                        break;
+                        
+                    case 'dropdown': 
+                        content += `<select id="${questionName}" name="${questionName}" class="question-input" required>`;
+                        content += `<option value="" disabled selected>선택해주세요</option>`; 
+                        content += q.options.map(opt => `
+                            <option value="${opt}">${opt}</option>
+                        `).join('');
+                        content += `</select>`;
+                        break;
+
+                    case 'rating': 
+                        content += '<div style="display: flex; justify-content: space-around; padding: 0 10px;">';
+                        for (let i = 1; i <= 5; i++) {
+                            content += `
+                            <div class="choice-option">
+                                <input type="radio" id="${questionName}_${i}" name="${questionName}" value="${i}점" class="question-input" required>
+                                <label for="${questionName}_${i}">${i}점</label>
+                            </div>
+                            `;
+                        }
+                        content += '</div>';
+                        break;
+                }
+                questionBlock.innerHTML = content;
+                questionsWrapper.appendChild(questionBlock);
+            });
+        }
+
+        // --- 3. 제출하기 버튼 클릭 시 ---
+        surveyForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); 
+            
+            const formData = new FormData(surveyForm);
+            
+            const name = formData.get('user_name');
+            const phone = formData.get('user_phone');
+            
+            if (!name || !phone) {
+                alert('이름과 전화번호를 모두 입력해주세요.');
+                return;
+            }
+
+            const answers = [];
+            let allAnswered = true;
+            for (let i = 0; i < originalQuestions.length; i++) {
+                const q = originalQuestions[i];
+                const value = formData.get(`q_${i}`); 
+
+                // 드롭다운의 초기값(disabled selected) 체크 추가
+                if (!value || value === '') { 
+                    allAnswered = false; 
+                    break;
+                }
+                
+                answers.push({
+                    questionText: q.text,
+                    value: value
+                });
+            }
+
+            if (!allAnswered) {
+                alert('모든 설문 문항에 응답해주세요.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/responses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ surveyId, name, phone, answers })
+                });
+                
+
+                const result = await response.json();
+                
+                if (response.status === 409) {
+                     throw new Error(result.message || '이미 참여한 전화번호입니다.');
+                }
+                
+                if (!response.ok) {
+                    throw new Error(result.message || '제출 실패');
+                }
+
+                surveyContainer.style.display = 'none'; 
+                messageContainer.innerHTML = `
+                    <div class="message success">
+                        <h2>설문 감사합니다!</h2>
+                        <p>${result.message}</p>
+                    </div>
+                `;
+                messageContainer.style.display = 'block';
+
+            } catch (error) {
+                showError(`제출 오류: ${error.message}`);
+            }
+        });
+
+        // --- 공통: 오류 메시지 표시 ---
+        function showError(message) {
+            surveyContainer.style.display = 'none'; 
+            messageContainer.innerHTML = `
+                <div class="message error">
+                    <h2>오류 발생</h2>
+                    <p>${message}</p>
+                </div>
+            `;
+            messageContainer.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

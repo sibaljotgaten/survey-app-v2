@@ -1,0 +1,23 @@
+{
+  "name": "survey-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.19.3",
+    "nodemailer": "^7.0.10",
+    "xlsx": "^0.18.5",
+    "axios": "^1.7.2",
+    "form-data": "^4.0.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
